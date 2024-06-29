@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:multi_dropdown/multiselect_dropdown.dart';
+import 'package:multi_dropdown2/multiselect_dropdown.dart';
 
 void main() {
   runApp(const MyApp());

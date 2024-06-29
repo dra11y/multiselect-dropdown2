@@ -4,10 +4,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart';
-import 'package:multi_dropdown/models/network_config.dart';
-import 'package:multi_dropdown/widgets/hint_text.dart';
-import 'package:multi_dropdown/widgets/selection_chip.dart';
-import 'package:multi_dropdown/widgets/single_selected_item.dart';
+import 'package:multi_dropdown2/models/network_config.dart';
+import 'package:multi_dropdown2/widgets/hint_text.dart';
+import 'package:multi_dropdown2/widgets/selection_chip.dart';
+import 'package:multi_dropdown2/widgets/single_selected_item.dart';
 import 'package:http/http.dart' as http;
 
 import 'models/chip_config.dart';
@@ -38,6 +38,8 @@ class MultiSelectDropDown<T> extends StatefulWidget {
   final List<ValueItem<T>> disabledOptions;
   final OnOptionSelected<T>? onOptionSelected;
 
+  final bool stretch;
+
   /// [onOptionRemoved] is the callback that is called when an option is removed.The callback takes two arguments, the index of the removed option and the removed option.
   /// This will be called only when the delete icon is clicked on the option chip.
   ///
@@ -47,6 +49,8 @@ class MultiSelectDropDown<T> extends StatefulWidget {
   ///
   /// ```option``` is the removed option.
   final void Function(int index, ValueItem<T> option)? onOptionRemoved;
+
+  final void Function(bool isOpen)? onDropdownToggled;
 
   // selected option
   final Icon? selectedOptionIcon;
@@ -223,15 +227,17 @@ class MultiSelectDropDown<T> extends StatefulWidget {
   /// ```
 
   const MultiSelectDropDown(
-      {Key? key,
+      {super.key,
       required this.onOptionSelected,
       required this.options,
       this.onOptionRemoved,
+      this.onDropdownToggled,
+      this.stretch = false,
       this.selectedOptionTextColor,
       this.chipConfig = const ChipConfig(),
       this.selectionType = SelectionType.multi,
       this.hint = 'Select',
-      this.hintColor = Colors.grey,
+      this.hintColor,
       this.hintFontSize = 14.0,
       this.hintPadding = HintText.hintPaddingDefault,
       this.selectedOptions = const [],
@@ -241,7 +247,7 @@ class MultiSelectDropDown<T> extends StatefulWidget {
       this.selectedOptionIcon = const Icon(Icons.check),
       this.selectedOptionBackgroundColor,
       this.optionsBackgroundColor,
-      this.fieldBackgroundColor = Colors.white,
+      this.fieldBackgroundColor,
       this.dropdownHeight = 200,
       this.showChipInSingleSelectMode = false,
       this.suffixIcon = const Icon(Icons.arrow_drop_down),
@@ -251,10 +257,10 @@ class MultiSelectDropDown<T> extends StatefulWidget {
       this.inputDecoration,
       this.hintStyle,
       this.padding,
-      this.focusedBorderColor = Colors.black54,
-      this.borderColor = Colors.grey,
-      this.borderWidth = 0.4,
-      this.focusedBorderWidth = 0.4,
+      this.focusedBorderColor,
+      this.borderColor,
+      this.borderWidth = 1.0,
+      this.focusedBorderWidth = 1.0,
       this.fieldBorderRadius = 12.0,
       this.radiusGeometry,
       this.maxItems,
@@ -271,8 +277,7 @@ class MultiSelectDropDown<T> extends StatefulWidget {
       this.searchLabel = 'Search'})
       : networkConfig = null,
         responseParser = null,
-        responseErrorBuilder = null,
-        super(key: key);
+        responseErrorBuilder = null;
 
   /// Constructor for MultiSelectDropDown that fetches the options from a network call.
   /// [networkConfig] is the configuration for the network call.
@@ -280,17 +285,19 @@ class MultiSelectDropDown<T> extends StatefulWidget {
   /// [responseErrorBuilder] is the builder that is used to build the error widget when the network call fails.
 
   const MultiSelectDropDown.network(
-      {Key? key,
+      {super.key,
       required this.onOptionSelected,
       required this.networkConfig,
       required this.responseParser,
       this.onOptionRemoved,
+      this.onDropdownToggled,
+      this.stretch = false,
       this.responseErrorBuilder,
       this.selectedOptionTextColor,
       this.chipConfig = const ChipConfig(),
       this.selectionType = SelectionType.multi,
       this.hint = 'Select',
-      this.hintColor = Colors.grey,
+      this.hintColor,
       this.hintFontSize = 14.0,
       this.selectedOptions = const [],
       this.disabledOptions = const [],
@@ -299,7 +306,7 @@ class MultiSelectDropDown<T> extends StatefulWidget {
       this.selectedOptionIcon = const Icon(Icons.check),
       this.selectedOptionBackgroundColor,
       this.optionsBackgroundColor,
-      this.fieldBackgroundColor = Colors.white,
+      this.fieldBackgroundColor,
       this.dropdownHeight = 200,
       this.showChipInSingleSelectMode = false,
       this.suffixIcon = const Icon(Icons.arrow_drop_down),
@@ -310,8 +317,8 @@ class MultiSelectDropDown<T> extends StatefulWidget {
       this.hintStyle,
       this.hintPadding = HintText.hintPaddingDefault,
       this.padding,
-      this.borderColor = Colors.grey,
-      this.focusedBorderColor = Colors.black54,
+      this.borderColor,
+      this.focusedBorderColor,
       this.borderWidth = 0.4,
       this.focusedBorderWidth = 0.4,
       this.fieldBorderRadius = 12.0,
@@ -328,8 +335,7 @@ class MultiSelectDropDown<T> extends StatefulWidget {
       this.singleSelectItemStyle,
       this.optionBuilder,
       this.searchLabel = 'Search'})
-      : options = const [],
-        super(key: key);
+      : options = const [];
 
   @override
   State<MultiSelectDropDown<T>> createState() => _MultiSelectDropDownState<T>();
@@ -361,6 +367,8 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
 
   /// search field focus node
   FocusNode? _searchFocusNode;
+
+  double _longestOptionWidth = 0;
 
   @override
   void initState() {
@@ -407,7 +415,16 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
 
   /// Adds the selected options and disabled options to the options list.
   void _addOptions() {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: _options.join('\n'),
+        style: _getOptionStyle(),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
     setState(() {
+      _longestOptionWidth = textPainter.width;
       _selectedOptions.addAll(_controller.selectedOptions.isNotEmpty == true
           ? _controller.selectedOptions
           : widget.selectedOptions);
@@ -435,18 +452,18 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
           : _buildOverlayEntry();
       Overlay.of(context).insert(_overlayEntry!);
       _updateSelection();
+      _controller.value._isDropdownOpen = true;
+      widget.onDropdownToggled?.call(true);
       return;
     }
 
-    if ((_searchFocusNode == null || _searchFocusNode?.hasFocus == false) &&
-        _overlayEntry != null) {
-      _overlayEntry?.remove();
+    if (_overlayEntry != null && !(_searchFocusNode?.hasFocus ?? false)) {
+      _overlayEntry!.remove();
+      _controller.value._isDropdownOpen = false;
+      widget.onDropdownToggled?.call(false);
     }
 
     if (mounted) _updateSelection();
-
-    _controller.value._isDropdownOpen =
-        _focusNode.hasFocus || _searchFocusNode?.hasFocus == true;
   }
 
   void _updateSelection() {
@@ -486,7 +503,10 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
             child: Container(
               height: widget.chipConfig.wrapType == WrapType.wrap ? null : 52,
               constraints: BoxConstraints(
-                minWidth: MediaQuery.of(context).size.width,
+                minWidth: _longestOptionWidth,
+                maxWidth: widget.stretch
+                    ? MediaQuery.of(context).size.width
+                    : _longestOptionWidth,
                 minHeight: 52,
               ),
               padding: _getContainerPadding(),
@@ -553,17 +573,19 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
   Decoration _getContainerDecoration() {
     return widget.inputDecoration ??
         BoxDecoration(
-          color: widget.fieldBackgroundColor ?? Colors.white,
+          color: widget.fieldBackgroundColor,
           borderRadius: widget.radiusGeometry ??
               BorderRadius.circular(widget.fieldBorderRadius ?? 12.0),
           border: _selectionMode
               ? Border.all(
-                  color: widget.focusedBorderColor ?? Colors.grey,
-                  width: widget.focusedBorderWidth ?? 0.4,
+                  color: widget.focusedBorderColor ??
+                      Theme.of(context).colorScheme.outline,
+                  width: widget.focusedBorderWidth ?? 1,
                 )
               : Border.all(
-                  color: widget.borderColor ?? Colors.grey,
-                  width: widget.borderWidth ?? 0.4,
+                  color: widget.borderColor ??
+                      Theme.of(context).colorScheme.outline,
+                  width: widget.borderWidth ?? 1,
                 ),
         );
   }
@@ -572,7 +594,7 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
   @override
   void dispose() {
     if (_overlayEntry?.mounted == true) {
-      if (_overlayState != null && _overlayEntry != null) {
+      if (_overlayState != null && _overlayEntry?.canSizeOverlay == true) {
         _overlayEntry?.remove();
       }
       _overlayEntry = null;
@@ -701,7 +723,7 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
     final Icon icon = widget.selectedOptionIcon ??
         Icon(
           Icons.check,
-          color: widget.optionTextStyle?.color ?? Colors.grey,
+          color: widget.optionTextStyle?.color,
         );
 
     return icon;
@@ -728,9 +750,6 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTap: _onOutSideTap,
-                child: const ColoredBox(
-                  color: Colors.transparent,
-                ),
               ),
             ),
             CompositedTransformFollower(
@@ -748,7 +767,7 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
                           : widget.dropdownMargin!)
                   : Offset.zero,
               child: Material(
-                  color: widget.dropdownBackgroundColor ?? Colors.white,
+                  color: widget.dropdownBackgroundColor,
                   elevation: 4,
                   clipBehavior: Clip.antiAlias,
                   shape: RoundedRectangleBorder(
@@ -756,11 +775,11 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
                       Radius.circular(widget.dropdownBorderRadius ?? 0),
                     ),
                   ),
-                  shadowColor: Colors.black,
                   child: Container(
                     decoration: BoxDecoration(
                       backgroundBlendMode: BlendMode.dstATop,
-                      color: widget.dropdownBackgroundColor ?? Colors.white,
+                      color: widget.dropdownBackgroundColor ??
+                          Theme.of(context).colorScheme.surface,
                       borderRadius: widget.dropdownBorderRadius != null
                           ? BorderRadius.circular(widget.dropdownBorderRadius!)
                           : null,
@@ -775,8 +794,8 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
                       children: [
                         if (widget.searchEnabled) ...[
                           ColoredBox(
-                            color:
-                                widget.dropdownBackgroundColor ?? Colors.white,
+                            color: widget.dropdownBackgroundColor ??
+                                Theme.of(context).colorScheme.surface,
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
                               child: TextFormField(
@@ -788,8 +807,7 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
                                         .bottom),
                                 focusNode: _searchFocusNode,
                                 decoration: InputDecoration(
-                                  fillColor: widget.searchBackgroundColor ??
-                                      Colors.grey.shade200,
+                                  fillColor: widget.searchBackgroundColor,
                                   isDense: true,
                                   filled: true,
                                   hintText: widget.searchLabel,
@@ -797,8 +815,7 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
                                     borderRadius: BorderRadius.circular(
                                         widget.fieldBorderRadius ?? 12),
                                     borderSide: BorderSide(
-                                      color: Colors.grey.shade300,
-                                      width: 0.8,
+                                      width: 1.0,
                                     ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
@@ -926,29 +943,35 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
     });
   }
 
-  ListTile _buildOption(
-          {required ValueItem<T> option,
-          required Color primaryColor,
-          required bool isSelected,
-          required StateSetter dropdownState,
-          required void Function() onTap,
-          required List<ValueItem<T>> selectedOptions}) =>
+  TextStyle _getOptionStyle() =>
+      widget.optionTextStyle ??
+      TextStyle(
+        fontSize: widget.hintFontSize,
+      );
+
+  ListTile _buildOption({
+    required ValueItem<T> option,
+    required Color primaryColor,
+    required bool isSelected,
+    required StateSetter dropdownState,
+    required void Function() onTap,
+    required List<ValueItem<T>> selectedOptions,
+  }) =>
       ListTile(
-          title: Text(option.label,
-              style: widget.optionTextStyle ??
-                  TextStyle(
-                    fontSize: widget.hintFontSize,
-                  )),
-          selectedColor: widget.selectedOptionTextColor ?? primaryColor,
-          selected: isSelected,
-          autofocus: true,
-          dense: true,
-          tileColor: widget.optionsBackgroundColor ?? Colors.white,
-          selectedTileColor:
-              widget.selectedOptionBackgroundColor ?? Colors.grey.shade200,
-          enabled: !_disabledOptions.contains(option),
-          onTap: onTap,
-          trailing: _getSelectedIcon(isSelected, primaryColor));
+        title: Text(
+          option.label,
+          style: _getOptionStyle(),
+        ),
+        selectedColor: widget.selectedOptionTextColor ?? primaryColor,
+        selected: isSelected,
+        autofocus: true,
+        dense: true,
+        tileColor: widget.optionsBackgroundColor,
+        selectedTileColor: widget.selectedOptionBackgroundColor,
+        enabled: !_disabledOptions.contains(option),
+        onTap: onTap,
+        trailing: _getSelectedIcon(isSelected, primaryColor),
+      );
 
   /// Make a request to the provided url.
   /// The response then is parsed to a list of ValueItem objects.
@@ -1020,9 +1043,6 @@ class _MultiSelectDropDownState<T> extends State<MultiSelectDropDown<T>> {
                 child: GestureDetector(
               onTap: _onOutSideTap,
               behavior: HitTestBehavior.opaque,
-              child: Container(
-                color: Colors.transparent,
-              ),
             )),
             CompositedTransformFollower(
                 link: _layerLink,

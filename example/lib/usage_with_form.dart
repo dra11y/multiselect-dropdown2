@@ -1,6 +1,6 @@
 import 'package:example/main.dart';
 import 'package:flutter/material.dart';
-import 'package:multi_dropdown/multiselect_dropdown.dart';
+import 'package:multi_dropdown2/multiselect_dropdown.dart';
 
 class UsageWithForm extends StatefulWidget {
   const UsageWithForm({super.key});
